@@ -1,6 +1,8 @@
 variables {
-  name_prefix = "terraform-test-infrastructure"
-  nginx_port  = 18080
+  name_prefix       = "terraform-test-infrastructure"
+  nginx_port        = 18080
+  postgres_password = "terraform-test-password"
+  postgres_port     = null
 }
 
 run "infrastructure" {
@@ -25,6 +27,21 @@ run "infrastructure" {
     condition     = docker_container.nginx.name == "${var.name_prefix}-nginx"
     error_message = "NGINX container was not created correctly."
   }
+
+  assert {
+    condition     = docker_container.postgres.name == "${var.name_prefix}-postgres"
+    error_message = "Postgres container was not created correctly."
+  }
+
+  assert {
+    condition     = docker_volume.postgres_data.name == "${var.name_prefix}-postgres-data"
+    error_message = "Postgres data volume was not created correctly."
+  }
+
+  assert {
+    condition     = docker_container.backend.name == "${var.name_prefix}-backend"
+    error_message = "Backend container was not created correctly."
+  }
 }
 
 run "nginx_is_reachable" {
@@ -41,5 +58,22 @@ run "nginx_is_reachable" {
   assert {
     condition     = data.http.nginx.status_code == 200
     error_message = "NGINX did not respond with HTTP 200."
+  }
+}
+
+run "backend_is_reachable_through_nginx" {
+  command = plan
+
+  module {
+    source = "./tests/http_check"
+  }
+
+  variables {
+    endpoint = "${run.infrastructure.nginx_url}/api/health"
+  }
+
+  assert {
+    condition     = data.http.nginx.status_code == 200
+    error_message = "Backend health check did not respond with HTTP 200 through NGINX."
   }
 }
